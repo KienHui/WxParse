@@ -66,15 +66,8 @@ vissm -> digit2 "SM" {% id %}
 	
 wx -> "BR" __
 
-pwxtor -> "+":? "FC" __ 
-
-pwsts -> "TS" wxprecip wxprecip:? wxprecip:? __ 
-
-wxint -> "-" | "+" | null | "VC"
-
-wxdesc -> "SH" | "TS" | "FZ" | "BL"
-
-wxprecip -> "DZ" | "RA" | "SN" | "SG" | "IC" | "PL" | "GR" | "GS"
+wxtor -> "+FC" __
+  | "FC" __
 
 # clouds
 
