@@ -1,40 +1,40 @@
 @builtin "whitespace.ne" # `_` means arbitrary amount of whitespace
 
-metar -> obId ICAO ddhhmmZ Wind viswx skycon tempdewpt obAlt {% 
-	function(d,l,reject) {
-		return {
-			type: d[0],
-			station: d[1],
-			time: d[2],
-			wind: d[3],
-			viswx: d[4],
-			cloud: d[5],
-			temp: d[6],
-			alstg: d[7]
-		};
-	}
-%}
+UpToThree[x] -> null {% id %}
+	| $x {% id %} 
+	| $x $x {% (d => [d[0][0], d[1][0]]) %}
+	| $x $x $x {% d => [d[0][0], d[1][0], d[2][0]] %}
 
 #wind values
-Wind -> direction speed gust:? speedunit __ {%
-		function(d,l,reject) {
-			if (d[2] && d[2]<d[1]) {
+Wind -> direction speed gust:? speedunit wndvar:? __ {%
+		function([dir,spd,g,unit,wvar],l,reject) {
+			if (g && g<spd) {
 				return reject;
 			}
+			if (dir == "VRB") {
+				wvar = true;
+			}
 			return {
-				dir: d[0],
-				spd: d[1],
-				gst: d[2],
-				unit: d[3]
+				dir: dir,
+				spd: spd,
+				gst: g,
+				unit: unit,
+        var: wvar
 			};
 		}
 	%}
 	| "M" __ {% ()=>(null) %}
-direction ->digit2 "0" {% ([fst, _],l,r) => fst <36 ? fst*10 : r %}
+	| "00000" speedunit __ {% ([calm,unit])=> ({dir:"000",spd:"00",unit:unit})%}
+direction -> wndnonvrbdir {% id %}
 	| "VRB" {% id %}
+wndnonvrbdir -> "0" nonzero "0" {% (d) => d.join("")|0 %}
+	| [1-2] digit "0" {% (d) => d.join("")|0 %}
+	| "3" [0-6] "0" {% (d) => d.join("")|0 %}
 speed -> digit2 {% id %} | nzdigit3 {% id %}
 gust -> "G" speed {% ([_,speed]) => speed %}
 speedunit -> "KT" {% id %} | "MPS" {% id %}
+wndvar -> __ wndnonvrbdir "V" wndnonvrbdir 
+  {% ([_,dir1,v, dir2]) => ({dir1:dir1, dir2:dir2})%}
 
 # times
 ddhhmmZ -> ddhhmm "Z" __ {% ([t,_]) => t %}
@@ -57,17 +57,42 @@ ddhhmm -> digit2 digit2 digit2 {%
 viswx -> vis wx:? {% ([v,w]) => ({vis:v, wx:w})%}
 
 vis -> vissm __ {% ([v]) => ({range: v, unit: "SM"})%}
+	| vismeter __ {% ([v]) => ({range: v, unit: "meter"})%}
 	| "M" __ {% ()=>(null) %}
 
 vissm -> digit2 "SM" {% id %}
 	| digit "SM" {% (d) => d[0][0] %}
 	| digit __ fraction "SM" {% ([m,_,f]) => (m|0)+f %}
-	| fraction "SM" {% id %}
+	| "M":? fraction "SM" {% (d) => d.join("")|0 %}
+
+vismeter -> "M":? digit2 "00" {% (d) => d.join("")|0 %}
+  | "9999"  {% id %}
+
+rvr -> "R" runway "/"
 	
 wx -> "BR" __
 
 wxtor -> "+FC" __
   | "FC" __
+
+wxts -> "VCTS"
+  | wxintensity "TS" UpToThree[wxprecip]
+
+wxsh -> "VCSH"
+  | wxintensity "SH" UpToThree[wxprecip]
+
+wxprecip -> "DZ" {% id %} 
+  | "RA"{% id %} 
+  | "SN"{% id %} 
+  | "SG"{% id %} 
+  | "IC"{% id %} 
+  | "PL"{% id %}
+  | "GR"{% id %} 
+  | "GS"{% id %} 
+
+wxintensity -> "+" {% id %} 
+  | "-" {% id %} 
+  | null {% id %}
 
 # clouds
 
@@ -100,10 +125,6 @@ temp -> digit2 {% id %}
 obAlt -> "A" digit4 __{% (d) => ({stg: d[1]/100, unit: "inHg"}) %}
 	| "Q" digit4 __{% (d) => ({stg: d[1], unit: "mb"}) %}
 
-# line starter
-
-obId -> "METAR" __ {% id %} | "SPECI" __ {% id %}
-
 # common
 alphanum -> alpha | digit
 alpha -> [a-zA-Z]
@@ -113,4 +134,4 @@ digit2 -> digit digit {% (d) => d.join("")|0 %}
 digit3 -> digit digit digit {% (d) => d.join("")|0 %}
 digit4 -> digit digit digit digit {% (d) => d.join("")|0 %}
 nzdigit3 -> nonzero digit digit {% (d) => d.join("")|0 %}
-fraction -> digit "/" ("2"|"4"|"8"|"16") {% ([n,s,d],l,r) => n<d?n[0]/d[0]:r %}
+fraction -> nonzero "/" ("2"|"4"|"8"|"16") {% ([n,s,d],l,r) => n<d?n[0]/d[0]:r %}
